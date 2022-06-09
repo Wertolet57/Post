@@ -1,10 +1,11 @@
+import java.util.Arrays;
 import java.util.logging.*;
 
 public class Main {
     public static final String AUSTIN_POWERS = "Austin Powers";
     public static final String WEAPONS = "weapons";
     public static final String BANNED_SUBSTANCE = "banned substance";
-    public static interface Sendable {
+    public interface Sendable {
         String getFrom();
         String getTo();
     }
@@ -164,12 +165,15 @@ public class Main {
     }
 
     public static class Spy implements MailService {
-        final Logger LOGGER = Logger.getLogger(Spy.class.getName());
+        final Logger LOGGER;
+        public Spy(Logger LOGGER) {
+            this.LOGGER = LOGGER;
+        }
         @Override
         public Sendable processMail(Sendable mail) {
             if (mail instanceof MailMessage) {
                 MailMessage mailMessage = (MailMessage) mail;
-                if (mailMessage.getFrom() == AUSTIN_POWERS) {
+                if (mailMessage.getFrom() == AUSTIN_POWERS || mailMessage.getTo() == AUSTIN_POWERS) {
                     LOGGER.log(Level.WARNING, "Detected target mail correspondence: from {0} to {1} \"{2}\"",new Object[]{mailMessage.getFrom(), mailMessage.getTo(), mailMessage.getMessage()});
                 } else {
                     LOGGER.log(Level.INFO, "Usual correspondence: from {0} to {1}",new Object[]{mailMessage.getFrom(), mailMessage.getTo()});
@@ -185,16 +189,66 @@ public class Main {
         public Sendable processMail(Sendable mail) throws StolenPackageException, IllegalPackageException {
             if (mail instanceof MailPackage) {
                 MailPackage mailPackage = (MailPackage) mail;
-                if (mailPackage.getContent().content.contains(WEAPONS) || mailPackage.getContent().content.contains(BANNED_SUBSTANCE)) {
+                if (mailPackage.getContent().getContent().contains(WEAPONS) || mailPackage.getContent().getContent().contains(BANNED_SUBSTANCE)) {
                     throw new IllegalPackageException("Prohibited content");
-                } else if (mailPackage.getContent().content.contains("stones")) {
+                } else if (mailPackage.getContent().getContent().contains("stones")) {
                     throw new StolenPackageException("Stones in package");
                 }
             }
             return mail;
         }
     }
-    public static void main(String[] args) {
 
+    public static class UntrustworthyMailWorker implements MailService {
+        MailService[] mailService;
+        RealMailService realMailService = new RealMailService();
+        public UntrustworthyMailWorker(MailService[] mailServices) {
+            this.mailService = mailServices;
+        }
+        public RealMailService getRealMailService() {
+            return realMailService;
+        }
+        @Override
+        public Sendable processMail(Sendable mail) throws StolenPackageException, IllegalPackageException {
+            for (int i = 0; i < mailService.length; i++) {
+                mail = mailService[i].processMail(mail);
+            }
+            realMailService.processMail(mail);
+            return mail;
+        }
+    }
+    public static void main(String[] args) {
+        Logger logger = Logger.getLogger(Main.class.getName());
+
+        Inspector inspector = new Inspector();
+        Spy spy = new Spy(logger);
+        Thief thief = new Thief(10000);
+        MailService variousWorkers[] = new MailService[]{spy, thief, inspector};
+        UntrustworthyMailWorker worker = new UntrustworthyMailWorker(variousWorkers);
+
+        AbstractSendable correspondence[] = {
+                new MailMessage("Oxxxymiron", "Гнойный", "Я здесь чисто по фану, поглумиться над слабым\n" +
+                        "Ты же вылез из мамы под мой дисс на Бабана...."),
+                new MailMessage("Гнойный", "Oxxxymiron", "....Что? Так болел за Россию, что на нервах терял ганглии.\n" +
+                        "Но когда тут проходили митинги, где ты сидел? В Англии!...."),
+                new MailMessage("Жриновский", AUSTIN_POWERS, "Бери пацанов, и несите меня к воде."),
+                new MailMessage(AUSTIN_POWERS, "Пацаны", "Го, потаскаем Вольфовича как Клеопатру"),
+                new MailPackage("берег", "море", new Package("ВВЖ", 32)),
+                new MailMessage("NASA", AUSTIN_POWERS, "Найди в России ракетные двигатели и лунные stones"),
+                new MailPackage(AUSTIN_POWERS, "NASA", new Package("рпакетный двигатель ", 2500000)),
+                new MailPackage(AUSTIN_POWERS, "NASA", new Package("stones", 1000)),
+                new MailPackage("Китай", "КНДР", new Package("banned substance", 99)),
+                new MailPackage(AUSTIN_POWERS, "ИГИЛ (запрещенная группировка", new Package("tiny bomb", 9000)),
+                new MailMessage(AUSTIN_POWERS, "Психиатр", "Помогите"),
+        };
+        Arrays.stream(correspondence).forEach(parcell -> {
+            try {
+                worker.processMail(parcell);
+            } catch (StolenPackageException e) {
+                logger.log(Level.WARNING, "Inspector found stolen package: " + e);
+            } catch (IllegalPackageException e) {
+                logger.log(Level.WARNING, "Inspector found illegal package: " + e);
+            }
+        });
     }
 }

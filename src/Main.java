@@ -127,7 +127,7 @@ public class Main {
     }
 
     public static interface MailService {
-        Sendable processMail(Sendable mail);
+        Sendable processMail(Sendable mail) throws StolenPackageException, IllegalPackageException;
     }
 
     public static class RealMailService implements MailService {
@@ -152,9 +152,8 @@ public class Main {
 
         @Override
         public Sendable processMail(Sendable mail) {
-            MailPackage mailPackage = null;
             if (mail instanceof MailPackage) {
-                mailPackage = (MailPackage) mail;
+                MailPackage mailPackage = (MailPackage) mail;
                 if (mailPackage.getContent().getPrice() >= minCoast) {
                     stolenValue+=mailPackage.getContent().getPrice();
                     mail = new MailPackage(mail.getFrom(), mail.getTo(), new Package(String.format("stones instead of %s",mailPackage.getContent().getContent()),0));
@@ -183,7 +182,15 @@ public class Main {
     public static class Inspector implements MailService {
 
         @Override
-        public Sendable processMail(Sendable mail) {
+        public Sendable processMail(Sendable mail) throws StolenPackageException, IllegalPackageException {
+            if (mail instanceof MailPackage) {
+                MailPackage mailPackage = (MailPackage) mail;
+                if (mailPackage.getContent().content.contains(WEAPONS) || mailPackage.getContent().content.contains(BANNED_SUBSTANCE)) {
+                    throw new IllegalPackageException("Prohibited content");
+                } else if (mailPackage.getContent().content.contains("stones")) {
+                    throw new StolenPackageException("Stones in package");
+                }
+            }
             return mail;
         }
     }
